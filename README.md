@@ -1,19 +1,5 @@
 <h1 align = 'center'> 매칭 서비스 기술 보고서 </h1>
 
-### 작성자 소개
-
-<img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/mark_down_%EC%9E%91%EC%84%B1%EC%9E%90_%EB%AA%85%ED%95%A8.png' align='left'/> 
-
-
-
-
-
-
-
-<br/>
-
-<br/>
-
 ### 📑 목차
 
 - [0️⃣ 매칭 서비스 한 눈에 이해하기](#0️⃣-매칭-서비스-한-눈에-이해하기)
@@ -66,3 +52,10 @@
 ## ⑸ 테스트 005 ~ 010: 톰캣 Thread 수와 DB connection 의 연관 관계
 ## ⑹ 테스트 016: SQL 진입점 로깅, 에러 수집, 슬로우 쿼리 확인
 
+
+
+
+
+### 𐦂𖨆𐀪𖠋 작성자 𐀪𐀪
+
+<img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/mark_down_%EC%9E%91%EC%84%B1%EC%9E%90_%EB%AA%85%ED%95%A8.png'/> 

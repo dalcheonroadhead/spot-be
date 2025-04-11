@@ -56,6 +56,6 @@
 
 
 
-### 𐦂𖨆𐀪𖠋 작성자 𐀪𐀪
+<div align='center'><h3>𐦂𖨆𐀪𖠋 작성자 𐀪𐀪</h3><img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/mark_down_%EC%9E%91%EC%84%B1%EC%9E%90_%EB%AA%85%ED%95%A8.png'/></div>
 
-<img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/mark_down_%EC%9E%91%EC%84%B1%EC%9E%90_%EB%AA%85%ED%95%A8.png'/> 
+ 

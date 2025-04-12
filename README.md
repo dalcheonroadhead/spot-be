@@ -106,7 +106,7 @@
     );
 ```
 
-![image-20250412162105389](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412162105389.png)
+<img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412162105389.png' align='center'/>
 
 ## (2) 1차 고도화: 쿼리 전략 개선
 
@@ -156,18 +156,19 @@
 
 <img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328021543165.png' width=100%/>
 
-- 나머지 두 개 (native-query, jpql 구현)은 3분이 지난 시점부터 에러율이 급증함
+- 나머지 두 개 (1차 고도화 버전 native-query, jpql 활용 API)는 3분이 지난 시점부터 에러율이 30% 수준으로 급증함.
 
 <p aling = 'center' style="display: flex; break-inside: avoid"><img src='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412164948464.png' width='50%'/><img src='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412165104697.png' width = "50%"</p>
 
 
 
-### 📊 트러블 슈팅
+### 📊 쿼리 분석 & 트러블 슈팅
 
-**🗺️ Geo Hash 격자 쿼리로 구현 - 보조 인덱스 사용 유도**
+**🗺️ Geo Hash원리를 쿼리로 구현 - 보조 인덱스 사용 유도 위함**
 
+- 위도, 경도를 복합 인덱스로 설정
 - B-tree 인덱스를 활용하기 위해 위도, 경도와 Between문을 활용해 넓이 3KM 짜리 격자를 생성함. 
-  위도, 경도를 복합 인덱스로 설정하여 1차 필터링을 시도
+  (Between 문에서 인덱스 활용한 1차 필터링 유도)
 
 <img src="https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328022358268.png" width="60%"/>  <img src="https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328021805917.png" alt="설명 이미지" width="300">
 
@@ -180,17 +181,31 @@ Limit: 100 row(s) (cost=10612 rows=100)(actual time=314..314 rows=100 loops=1)
             Table scan on job (cost=10612 rows=97706) (actual time=0.0353..141 rows=100000 loops=1)
 ```
 
+![image-20250412171455743](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412171455743.png)
 
+🧪 **인덱스 강제 적용과 미적용 실행 계획 비교**
 
-🧪 **실행 계획 확인**
-
-- 강제 인덱스 적용 후 실행계획 확인 시, full scan 보다 cost는 높지만, 실행 시간은 낮음을 확인.
-  옵티마이저가 잘못된 실행계획을 세운다고 판단하여 다음과 같이 쿼리  개선
+- 왜 복합 인덱스를 타지 않는지 궁금
+- 옵티마이저 강제 힌트를 적용해서, 실행 계획 확인
 
 <p align ='center' style="display: flex; break-inside: avoid"> 
-<img src="https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328023929214.png" width = 50%/>
-<img src = "https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328023331266.png" width = 50%/>
+<img src="https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328023929214.png" width = 49%/>
+<img src = "https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328023331266.png" width = 49%/>
 </p>
+
+- 강제 인덱스 적용 결과, 미적용 시보다, COST는 4.5배 높지만, 실행 시간은 10배 단축됨을 확인
+- 옵티마이저가 실행계획에서 랜덤 I/O 접근에 대한 비용을 과하게 잡고 있다고 판단 
+
+
+
+**🧪 서브 쿼리 재활용, 미활용 실행계획 분석**
+
+<p align ='center' style="display: flex; break-inside: avoid"> 
+<img src="https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328023732304.png" width = 50%/>
+<img src = "https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328023751395.png" width = 50%/>
+</p>
+
+- 서브쿼리로 거리 계산 결과를 2번 재활용 하였더니, 실행 시간이 10배 빨라짐. 
 
 ### ✅ 개선 사항
 
@@ -202,13 +217,26 @@ Limit: 100 row(s) (cost=10612 rows=100)(actual time=314..314 rows=100 loops=1)
 
 
 
-🛠️ **쿼리 튜닝**
+ **🛠️ 쿼리 튜닝**
 
 - 실행 계획을 미리 읽고, full-scan 건 수가 10만 건 이상이면 옵티마이저에 복합 인덱스 강제 적용 힌트 
   (미만이면 권장 적용) 
 - 복합 인덱스를 커버링 인덱스로 변경, 클러스터형 인덱스 랜덤 접근 I/O 시간 단축
+
+<img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412171840198.png' align='center'/>
+
 - 서브 쿼리로 거리 계산문 재활용
 - JPA  ➜ JDBC 변환하여 영속성 캐싱 피하기
+
+**결과 사진**
+
+- 기존 1201ms의 쿼리를 10.2초의 쿼리로 단축
+
+<img src = "https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328023751395.png" width = 70% align='center'/>
+
+- **`평균 RPT`: 4000ms ➜ 290ms**, **`평균 TPS`: 100 ➜ 240**
+
+<img src = "https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328025139102.png" width = 100%/>
 
 ## ⑷ 3차 고도화: MySQL 공간 객체 활용
 

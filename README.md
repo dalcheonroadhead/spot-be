@@ -4,9 +4,9 @@
 
 - [0️⃣ 매칭 서비스 한 눈에 이해하기](#0️⃣-매칭-서비스-한-눈에-이해하기)
   - [⑴ 개요](#(1)-개요)
-  - [⑵ USER FLOW](#⑵-user-flow)
-  - [⑶ 서비스 아키텍쳐](⑶-서비스-아키텍쳐)
-  - [⑷ ERD](#⑷-erd)
+  - [⑵ USER FLOW](#(2)-user-flow)
+  - [⑶ 서비스 아키텍쳐](#(3)-서비스-아키텍쳐)
+  - [⑷ ERD](#(4)-erd)
   
 - [1️⃣ '근처 일거리 찾기 API' 고도화 과정과 결과](#1️⃣-근처-일거리-찾기-api-고도화-과정과-결과)
   - [⑴ 최초 구현](#⑴-최초-구현)
@@ -27,12 +27,12 @@
 
 # 0️⃣ 매칭 서비스 한 눈에 이해하기
 
-## ⑴ 개요
+## (1) 개요
 
 - 하기 싫은 **`소일 거리`** 대신 해줄 사람을 매칭 해주는 서비스
 - **`당근 알바`, `해주세요`** 같은 앱을 소일거리 매칭으로 특화
 
-## ⑵ USER FLOW
+## (2) USER FLOW
 
 ### A. 일 등록 부터 해결까지
 
@@ -45,14 +45,14 @@
 
 ![image-20250412133004318](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412133004318.png)
 
-## ⑶ 서비스 아키텍쳐
+## (3) 서비스 아키텍쳐
 
 ![SPOT_JOB_MATCHING_ARCHITECTURE](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/SPOT_JOB_MATCHING_ARCHITECTURE.png)
 
 - Redis 활용 Read/Write-Through Pattern 구현
 - 모든 API 요청은 계약 상대방에게 **`FCM 알림`** 전송
 
-## ⑷ ERD
+## (4) ERD
 
 ![spot_job_matching_erd](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/spot_job_matching_erd.png)
 

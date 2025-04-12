@@ -49,11 +49,18 @@
 
 ![SPOT_JOB_MATCHING_ARCHITECTURE](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/SPOT_JOB_MATCHING_ARCHITECTURE.png)
 
-- 근처 사용자 찾기를 제외한 모든 API 요청은 계약 상대방에게 **`FCM 알림`** 전송
+- Redis 활용 Read/Write-Through Pattern 구현
+- 모든 API 요청은 계약 상대방에게 **`FCM 알림`** 전송
 
-## ⑷ ERD 
+## ⑷ ERD
 
+![spot_job_matching_erd](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/spot_job_matching_erd.png)
 
+### A. Matching 교차테이블에 대한 이해
+
+![image-20250412154814804](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412154814804.png)
+
+- 각 회원은 일거리에 대해서 자신만의 상태 (**`MatchingStatus`**)를 가진다. 가질 수 있는 상태는 위와 같다.
 
 # 1️⃣ '근처 일거리 찾기 API' 고도화 과정과 결과
 ## ⑴ 최초 구현

@@ -16,12 +16,14 @@
   - [⑸ 4차 고도화: read/write - through 패턴 구현, l1/l2 캐싱](#5-4차-고도화-readwrite---through-패턴-구현-l1l2-캐싱)
 
 - [2️⃣ '매칭 User flow 시나리오 테스트 15회와 그 개선 과정'](#2️⃣-매칭-user-flow-시나리오-테스트-15회와-그-개선-과정)
+  - [(0) 테스트 목표 설정](#0-테스트-목표-설정)
   - [⑴ 테스트 001](#1-테스트-001)
   - [⑵ 테스트 002: was, os 튜닝 후](#2-테스트-002-was-os-튜닝-후)
   - [⑶ 테스트 003: 알림 전송 서비스에 retry 로직 추가 후](#3-테스트-003-알림-전송-서비스에-retry-로직-추가-후)
   - [⑷ 테스트 004: 지연 변이 로직 구현 후](#4-테스트-004-지연-변이-로직-구현-후)
   - [⑸ 테스트 005 ~ 010: 톰캣 thread 수와 db connection 의 연관 관계](#5-테스트-005--010-톰캣-thread-수와-db-connection-의-연관-관계)
   - [⑹ 테스트 016: sql 진입점 로깅, 에러 수집, 슬로우 쿼리 확인](#6-테스트-016-sql-진입점-로깅-에러-수집-슬로우-쿼리-확인)
+  
 
 
 
@@ -74,8 +76,10 @@
 
 ## (0) 결론
 
-- **`평균 RPT`**: **2705ms ➜ 91ms 단축, TPS 200 상승** 
-  **(**v-user 3000명, 1000 RPS, ramp-up: 300, 10분 지속 기준**)**
+> **(v-user 3000명, 1000 RPS, ramp-up: 300, 10분 지속 기준)**
+
+- **`평균 RPT`**: **2705ms ➜ 91ms 단축** 
+- **`평균TPS`: 200 상승** 
 
 ## (1) 최초 구현
 
@@ -110,7 +114,7 @@
 
 ## (2) 1차 고도화: 쿼리 전략 개선
 
-### 🛠️ 첫 구현 부하테스트 실행
+### 🛠️ 부하테스트 기준
 
 - `대상 데이터`: 회원 = 5000명, 일거리 = 5000개, 
 - `Thread 수` : 500, `ramp-up`: 300, `지속`: 6분 지속, `페이지 머무르는 시간`: 2초
@@ -139,7 +143,7 @@
 
 
 
-## ⑶ 2차 고도화: 쿼리 튜닝
+## (3) 2차 고도화: 쿼리 튜닝
 
 ### 🛠️ 일거리 데이터 3000개 ➜ 20만 개 추가 후 부하테스트 실행
 
@@ -148,21 +152,23 @@
 
 ### 🚨 문제 상황
 
-- 기존 쿼리가 **‘**table full scan**’** 을 타는터라 20만 데이터 추가 후 Timeout으로 인한 오류율 30% 평균 RPT 4000ms로 급증 
+- 기존 쿼리가 **‘**table full scan**’** 을 타는터라 20만 데이터 추가 후 Timeout으로 인한 최대 오류율 30% 평균 RPT 4000ms로 급증 
 -  위,경도 복합 인덱스를 만들어도, 옵티마이저가 table full scan을 선택해서 쿼리 개선이 안됨. 
 - `RDB에서 일 찾기 fullscan - O(N)` ➜ `찾은 일과 사용자 간의 거리계산 O(N)` ➜ `DTO MAPPING O(N)`이라는 **`O(3N)`**의 시간 복잡도를 극복하지 못함.
 
 - 1차 고도화 했던 API는 RDB 데이터 양이 커지는 것과 RPT가 비례하는 모습을 보임.
+- querydsl의 경우 오류율은 없었음.
 
 <img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328021543165.png' width=100%/>
 
-- 나머지 두 개 (1차 고도화 버전 native-query, jpql 활용 API)는 3분이 지난 시점부터 에러율이 30% 수준으로 급증함.
+- 나머지 두 개 (1차 고도화 버전 native-query, jpql 활용 API) 또한 RPT가 데이터양과 비례에서 올라감.
+- 3분이 지난 시점부터 에러율이 30% 수준으로 급증함.
 
 <p aling = 'center' style="display: flex; break-inside: avoid"><img src='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412164948464.png' width='50%'/><img src='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412165104697.png' width = "50%"</p>
 
 
 
-### 📊 쿼리 분석 & 트러블 슈팅
+### 📊 트러블 슈팅
 
 **🗺️ Geo Hash원리를 쿼리로 구현 - 보조 인덱스 사용 유도 위함**
 
@@ -219,9 +225,8 @@ Limit: 100 row(s) (cost=10612 rows=100)(actual time=314..314 rows=100 loops=1)
 
  **🛠️ 쿼리 튜닝**
 
-- 실행 계획을 미리 읽고, full-scan 건 수가 10만 건 이상이면 옵티마이저에 복합 인덱스 강제 적용 힌트 
-  (미만이면 권장 적용) 
-- 복합 인덱스를 커버링 인덱스로 변경, 클러스터형 인덱스 랜덤 접근 I/O 시간 단축
+- **`동적 옵티마이저 힌트 주입`**: 실행 계획을 미리 읽고, full-scan 건 수가 10만 건 이상이면 옵티마이저에 복합 인덱스 강제 적용 힌트 (미만이면 권장 적용) 
+- **`커버링 인덱스 생성`**: 복합 인덱스를 커버링 인덱스로 변경, 클러스터형 인덱스 랜덤 접근 I/O 시간 단축
 
 <img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412171840198.png' align='center'/>
 
@@ -238,21 +243,109 @@ Limit: 100 row(s) (cost=10612 rows=100)(actual time=314..314 rows=100 loops=1)
 
 <img src = "https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328025139102.png" width = 100%/>
 
-## ⑷ 3차 고도화: MySQL 공간 객체 활용
+## (4) 3차 고도화: MySQL 공간 객체 활용
+
+### 🛠️ 부하테스트 기준 2차 고도화와 동일
+
+### 🚨 문제 상황
+
+현직자 멘토링에서 다음 2가지를 지적 받음
+
+- 강제 힌트 적용은 옵티마이저를 변형 시킬 수 있어 팀원 쿼리에도 영향을 주기에 안 좋은 개선 방향
+- 속도를 위해 비즈니스 로직을 전부 쿼리에 넣는 행위는 관심사 분리를 역행하는 행위 
+
+쿼리에 대한 강제 튜닝 없이 2차 고도화 의 퍼포먼스와 동급, 그 이상을 목표로 고도화 진행
+
+### 📊 트러블 슈팅
+
+🧪 **옵티마이저의 자연스러운 보조 인덱스(B+tree) 사용 시점 확인 실험**
+
+- 판교 PDC 건물을 기점으로 위, 경도 데이터 10만개를 밀집, 분산해서 DB에 넣는 행위를 30번 반복 
+- 힌트 없는 환경에서 언제 옵티마이저가 자연스럽게 B+tree Index를 선택하는지 확인
+- 그 결과 전체의 2.33%인 데이터 (3000개) 에서만 Btween문 전에 인덱스를 활용함을 발견
 
 
 
-## ⑸ 4차 고도화: read/write - through 패턴 구현, L1/L2 캐싱
+🧪 **R-tree 공간 객체 인덱스 적용 후 옵티마이저의 실행 계획 재확인**
+
+- 한 좌표에 10만 개의 데이터가 몰려 있는 Edge Case 가 아닌 한 전체 데이터 100%로 인덱스가 적용됨.
+- COST는 강제 인덱싱 적용보다 6배 낮음, 실행 시간은 0.05초로 살짝 느렸으나, 서비스 적용엔 문제 없다 판단
+- 해당 Edge Case의 경우, 300RPS만 넘겨도 DB가 다운된다.
+
+
+
+### ✅ 개선 사항
+
+**🌟결과**: 
+
+- **`평균 RPT`: 290ms ➜ 170ms**
+-  **`평균 TPS`: 240 ➜ 210**
+
+🛠️ **서버 로직 개선**
+
+- 쿼리문에 섞여있던 비즈니스 로직(사용자 - 일 거리 계산)을 서버로 분리, MapStruct + 병렬 스트림 조합 구현
+
+![image-20250412174004294](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412174004294.png)
+
+- **결과**
+  : RPT가 1초 안 쪽이긴 하지만, 2차 고도화보다 퍼포먼스가 5배 저하됨. 
+
+![parellel_stream](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/parellel_stream.png)
+
+🛠️ **쿼리 튜닝 **
+
+- 거리 계산, 반경 내 일거리 찾기에 mySQL의 공간 객체 함수 활용
+
+- Spatial Index 기반 R-tree 인덱스 적용
+
+![image-20250412174012888](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412174012888.png)
+
+- 결과
+- **`RPT`**: 290ms ➜ 170ms
+- **`TPS`**: 240 ➜ 210
+
+<img src = 'https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412212854367.png' width = 100%/>
+
+
+
+## (5) 4차 고도화: read/write - through 패턴 구현, L1/L2 캐싱
+
+### 🛠️ 부하테스트 기준 2차 고도화와 동일
+
+### 🚨 문제 상황
+
+- R-tree 인덱스는 태생적으로 커버링 인덱스가 안됨. 
+  따라서 O(logN)의 랜덤 I/O 접근 + O(M)의 데이터 Read 라는 태생적 시간 복잡도 한계를 벗어나지 못함
+- 해당 한계를 넘어서서 RPT, TPS 성능을 높이면서도 오류율 0.0%를 유지할 방법 모색
+
+### ✅ 개선 사항
+
+**🌟결과:** 
+
+- 평균 RPT 170ms ➜ 91ms 
+-  평균 TPS 240ms ➜ 290ms 
+
+🛠️ **쿼리 튜닝 **
+
+- AWS 기술 블로그를 보며, CQRS, DAX 등 디자인 패턴을 학습, 하지만 이런 패턴들은 MSA를 염두한 패턴이라 모놀리식에는 과하다 판단, 내장 캐싱 혹은 redis 까지만 써서, 해결 방법 모색
+- L1 캐싱 (Spring 내장 Caffeine 활용) 으로 read/write-through 패턴 구현
+- L2 캐싱(Redis)으로 read/write 패턴 구현
+- L2 다운 시  L1이 백업할 수 있도록 조치 
 
 
 
 # 2️⃣ '매칭 User flow 시나리오 테스트 15회와 그 개선 과정'
-## ⑴ 테스트 001 
-## ⑵ 테스트 002: WAS, OS 튜닝 후
-## ⑶ 테스트 003: 알림 전송 서비스에 Retry 로직 추가 후 
-## ⑷ 테스트 004: 지연 변이 로직 구현 후
-## ⑸ 테스트 005 ~ 010: 톰캣 Thread 수와 DB connection 의 연관 관계
-## ⑹ 테스트 016: SQL 진입점 로깅, 에러 수집, 슬로우 쿼리 확인
+
+## (0) 테스트 목표 설정
+
+
+
+## (1) 테스트 001 
+## (2) 테스트 002: WAS, OS 튜닝 후
+## (3) 테스트 003: 알림 전송 서비스에 Retry 로직 추가 후 
+## (4) 테스트 004: 지연 변이 로직 구현 후
+## (5) 테스트 005 ~ 010: 톰캣 Thread 수와 DB connection 의 연관 관계
+## (6) 테스트 016: SQL 진입점 로깅, 에러 수집, 슬로우 쿼리 확인
 
 
 

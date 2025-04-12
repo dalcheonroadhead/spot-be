@@ -9,19 +9,19 @@
   - [⑷ ERD](#4-erd)
   
 - [1️⃣ '근처 일거리 찾기 API' 고도화 과정과 결과](#1️⃣-근처-일거리-찾기-api-고도화-과정과-결과)
-  - [⑴ 최초 구현](#⑴-최초-구현)
-  - [⑵ 1차 고도화: 쿼리 전략 개선](#⑵-1차-고도화-쿼리-전략-개선)
-  - [⑶ 2차 고도화: 쿼리 튜닝](#⑶-2차-고도화-쿼리-튜닝)
-  - [⑷ 3차 고도화: mysql 공간 객체 활용](#⑷-3차-고도화-mysql-공간-객체-활용)
-  - [⑸ 4차 고도화: read/write - through 패턴 구현, l1/l2 캐싱](#⑸-4차-고도화-readwrite---through-패턴-구현-l1l2-캐싱)
+  - [⑴ 최초 구현](#1-최초-구현)
+  - [⑵ 1차 고도화: 쿼리 전략 개선](#2-1차-고도화-쿼리-전략-개선)
+  - [⑶ 2차 고도화: 쿼리 튜닝](#3-2차-고도화-쿼리-튜닝)
+  - [⑷ 3차 고도화: mysql 공간 객체 활용](#4-3차-고도화-mysql-공간-객체-활용)
+  - [⑸ 4차 고도화: read/write - through 패턴 구현, l1/l2 캐싱](#5-4차-고도화-readwrite---through-패턴-구현-l1l2-캐싱)
 
 - [2️⃣ '매칭 User flow 시나리오 테스트 15회와 그 개선 과정'](#2️⃣-매칭-user-flow-시나리오-테스트-15회와-그-개선-과정)
-  - [⑴ 테스트 001](#⑴-테스트-001)
-  - [⑵ 테스트 002: was, os 튜닝 후](#⑵-테스트-002-was-os-튜닝-후)
-  - [⑶ 테스트 003: 알림 전송 서비스에 retry 로직 추가 후](#⑶-테스트-003-알림-전송-서비스에-retry-로직-추가-후)
-  - [⑷ 테스트 004: 지연 변이 로직 구현 후](#⑷-테스트-004-지연-변이-로직-구현-후)
-  - [⑸ 테스트 005 ~ 010: 톰캣 thread 수와 db connection 의 연관 관계](#⑸-테스트-005--010-톰캣-thread-수와-db-connection-의-연관-관계)
-  - [⑹ 테스트 016: sql 진입점 로깅, 에러 수집, 슬로우 쿼리 확인](#⑹-테스트-016-sql-진입점-로깅-에러-수집-슬로우-쿼리-확인)
+  - [⑴ 테스트 001](#1-테스트-001)
+  - [⑵ 테스트 002: was, os 튜닝 후](#2-테스트-002-was-os-튜닝-후)
+  - [⑶ 테스트 003: 알림 전송 서비스에 retry 로직 추가 후](#3-테스트-003-알림-전송-서비스에-retry-로직-추가-후)
+  - [⑷ 테스트 004: 지연 변이 로직 구현 후](#4-테스트-004-지연-변이-로직-구현-후)
+  - [⑸ 테스트 005 ~ 010: 톰캣 thread 수와 db connection 의 연관 관계](#5-테스트-005--010-톰캣-thread-수와-db-connection-의-연관-관계)
+  - [⑹ 테스트 016: sql 진입점 로깅, 에러 수집, 슬로우 쿼리 확인](#6-테스트-016-sql-진입점-로깅-에러-수집-슬로우-쿼리-확인)
 
 
 
@@ -31,6 +31,8 @@
 
 - 하기 싫은 **`소일 거리`** 대신 해줄 사람을 매칭 해주는 서비스
 - **`당근 알바`, `해주세요`** 같은 앱을 소일거리 매칭으로 특화
+
+
 
 ## (2) USER FLOW
 
@@ -45,12 +47,16 @@
 
 ![image-20250412133004318](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412133004318.png)
 
+
+
 ## (3) 서비스 아키텍쳐
 
 ![SPOT_JOB_MATCHING_ARCHITECTURE](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/SPOT_JOB_MATCHING_ARCHITECTURE.png)
 
 - Redis 활용 Read/Write-Through Pattern 구현
 - 모든 API 요청은 계약 상대방에게 **`FCM 알림`** 전송
+
+
 
 ## (4) ERD
 
@@ -62,12 +68,155 @@
 
 - 각 회원은 일거리에 대해서 자신만의 상태 (**`MatchingStatus`**)를 가진다. 가질 수 있는 상태는 위와 같다.
 
+
+
 # 1️⃣ '근처 일거리 찾기 API' 고도화 과정과 결과
-## ⑴ 최초 구현
-## ⑵ 1차 고도화: 쿼리 전략 개선
+
+## (0) 결론
+
+- **`평균 RPT`**: **2705ms ➜ 91ms 단축, TPS 200 상승** 
+  **(**v-user 3000명, 1000 RPS, ramp-up: 300, 10분 지속 기준**)**
+
+## (1) 최초 구현
+
+1. 프론트에서 위도, 경도 전송
+2. Haver-sine 거리 공식 활용, table-full-scan으로 모든 일과의 거리 계산 
+3. 페이지 네이션 적용 후 반환
+
+```java
+   @Query("""
+    SELECT j FROM Job j
+    WHERE j.startedAt IS NULL
+      AND (6371 * acos(
+               cos(radians(:lat)) * cos(radians(j.lat)) *
+               cos(radians(j.lng) - radians(:lng)) +
+               sin(radians(:lat)) * sin(radians(j.lat))
+           )) < :dist
+    ORDER BY (6371 * acos(
+                cos(radians(:lat)) * cos(radians(j.lat)) *
+                cos(radians(j.lng) - radians(:lng)) +
+                sin(radians(:lat)) * sin(radians(j.lat))
+            )) ASC
+    """)
+    Slice<Job> findNearByJobWithJPQL(
+        @Param("lat") double lat,
+        @Param("lng") double lng,
+        @Param("dist") double dist,
+        Pageable pageable
+    );
+```
+
+![image-20250412162105389](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412162105389.png)
+
+## (2) 1차 고도화: 쿼리 전략 개선
+
+### 🛠️ 첫 구현 부하테스트 실행
+
+- `대상 데이터`: 회원 = 5000명, 일거리 = 5000개, 
+- `Thread 수` : 500, `ramp-up`: 300, `지속`: 6분 지속, `페이지 머무르는 시간`: 2초
+
+### 🚨 문제 상황
+
+- 첫 구현의 평균 RPT: 3102ms
+- 부하 10분 이상 지속 시 응답 시간은 우상향을 유지
+
+### ✅ 개선 사항
+
+**🌟결과**:  **평균  RPT 3102ms ➜ 403ms 단축**
+
+- 󠁯쿼리나 서버 로직을 최적화 하기 전에, 쿼리 전송 전략  최적화가 우선 되어야 한다 판단
+-  JPQL, native-query, query-dsl로 구현 후 성능 테스트 재실시
+
+<img src="https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328011632812.png" width = 100%/>
+<img src = "https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328011553536.png" width = 100%/>
+
+<img src = "https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328011835923.png" width=100%/>
+
+- 테스트 결과
+  - `JPQL`:  평균 RPT = 1040ms, 평균 TPS = 140, 지속 3분 후부터는 평균 RPT가 1.2초를 넘기며 우상향
+  - `native-query`: 평균 RPT = 710ms, 평균 TPS = 210, 모든 응답이 1초 이내로 들어옴 
+  - `query-dsl`: 평균 RPT = 400ms 이하, 평균 TPS = 240 
+
+
+
 ## ⑶ 2차 고도화: 쿼리 튜닝
+
+### 🛠️ 일거리 데이터 3000개 ➜ 20만 개 추가 후 부하테스트 실행
+
+- `대상 데이터`: 회원 = 200000명, 일거리 = 200000개, 
+- `Thread 수` : 500, `ramp-up`: 300, `지속`: 6분 지속, `페이지 머무르는 시간`: 2초
+
+### 🚨 문제 상황
+
+- 기존 쿼리가 **‘**table full scan**’** 을 타는터라 20만 데이터 추가 후 Timeout으로 인한 오류율 30% 평균 RPT 4000ms로 급증 
+-  위,경도 복합 인덱스를 만들어도, 옵티마이저가 table full scan을 선택해서 쿼리 개선이 안됨. 
+- `RDB에서 일 찾기 fullscan - O(N)` ➜ `찾은 일과 사용자 간의 거리계산 O(N)` ➜ `DTO MAPPING O(N)`이라는 **`O(3N)`**의 시간 복잡도를 극복하지 못함.
+
+- 1차 고도화 했던 API는 RDB 데이터 양이 커지는 것과 RPT가 비례하는 모습을 보임.
+
+<img src ='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328021543165.png' width=100%/>
+
+- 나머지 두 개 (native-query, jpql 구현)은 3분이 지난 시점부터 에러율이 급증함
+
+<p aling = 'center' style="display: flex; break-inside: avoid"><img src='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412164948464.png' width='50%'/><img src='https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412165104697.png' width = "50%"</p>
+
+
+
+### 📊 트러블 슈팅
+
+**🗺️ Geo Hash 격자 쿼리로 구현 - 보조 인덱스 사용 유도**
+
+- B-tree 인덱스를 활용하기 위해 위도, 경도와 Between문을 활용해 넓이 3KM 짜리 격자를 생성함. 
+  위도, 경도를 복합 인덱스로 설정하여 1차 필터링을 시도
+
+<img src="https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328022358268.png" width="60%"/>  <img src="https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328021805917.png" alt="설명 이미지" width="300">
+
+- 인덱싱을 활용해 O(M^2)이 아닌 O(logN + M) (N ➜ 데이터 접근, M ➜ 데이터 리드)를 바랬으나, 인덱싱을 활용하지 않고 `FULL-SCAN`을 탐.  
+
+```sql
+Limit: 100 row(s) (cost=10612 rows=100)(actual time=314..314 rows=100 loops=1)
+   Sort: distance, limit input to 100 row(s) per chunk (cost=10612 rows=97706) (actual time=149..149 rows=0 loops=1) 
+       Filter: (Haver-sine d 연산) (actual time=149..149 rows=0 loops=1) 
+            Table scan on job (cost=10612 rows=97706) (actual time=0.0353..141 rows=100000 loops=1)
+```
+
+
+
+🧪 **실행 계획 확인**
+
+- 강제 인덱스 적용 후 실행계획 확인 시, full scan 보다 cost는 높지만, 실행 시간은 낮음을 확인.
+  옵티마이저가 잘못된 실행계획을 세운다고 판단하여 다음과 같이 쿼리  개선
+
+<p align ='center' style="display: flex; break-inside: avoid"> 
+<img src="https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328023929214.png" width = 50%/>
+<img src = "https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328023331266.png" width = 50%/>
+</p>
+
+### ✅ 개선 사항
+
+**🌟결과**: 
+
+- **`쿼리 실행 시간`: 1.2초➜ 0.0102초,**
+- **`평균 RPT`: 4000ms ➜ 290ms**
+-  **`평균 TPS`: 100 ➜ 240**
+
+
+
+🛠️ **쿼리 튜닝**
+
+- 실행 계획을 미리 읽고, full-scan 건 수가 10만 건 이상이면 옵티마이저에 복합 인덱스 강제 적용 힌트 
+  (미만이면 권장 적용) 
+- 복합 인덱스를 커버링 인덱스로 변경, 클러스터형 인덱스 랜덤 접근 I/O 시간 단축
+- 서브 쿼리로 거리 계산문 재활용
+- JPA  ➜ JDBC 변환하여 영속성 캐싱 피하기
+
 ## ⑷ 3차 고도화: MySQL 공간 객체 활용
+
+
+
 ## ⑸ 4차 고도화: read/write - through 패턴 구현, L1/L2 캐싱
+
+
 
 # 2️⃣ '매칭 User flow 시나리오 테스트 15회와 그 개선 과정'
 ## ⑴ 테스트 001 

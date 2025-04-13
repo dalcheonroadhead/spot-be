@@ -325,7 +325,7 @@ Limit: 100 row(s) (cost=10612 rows=100)(actual time=314..314 rows=100 loops=1)
 - 평균 RPT 170ms ➜ 91ms 
 -  평균 TPS 240ms ➜ 290ms 
 
-🛠️ **쿼리 튜닝 **
+**🛠️ 서버 개선**
 
 - AWS 기술 블로그를 보며, CQRS, DAX 등 디자인 패턴을 학습, 하지만 이런 패턴들은 MSA를 염두한 패턴이라 모놀리식에는 과하다 판단, 내장 캐싱 혹은 redis 까지만 써서, 해결 방법 모색
 - L1 캐싱 (Spring 내장 Caffeine 활용) 으로 read/write-through 패턴 구현
@@ -338,16 +338,189 @@ Limit: 100 row(s) (cost=10612 rows=100)(actual time=314..314 rows=100 loops=1)
 
 ## (0) 테스트 목표 설정
 
+### 🎯목표
 
+**5000RPS를 버티며 오류율 0.0%, 시나리오 내의 모든 응답을 3초 내에 주는 서버를 만들자.**
+
+자세한 지표는 [SPOT 시나리오 테스트 전체 과정](https://github.com/6-SPOT/spot-be/wiki) 에서 볼 수 있습니다.
+
+### ⚙️ 시나리오 과정
+
+- (0) 회원 중 의뢰인, 해결사 지정 후 JWT 토큰 발급 및 Jmeter에 주입
+
+- (1) 의뢰인이 일 등록하기 (`/api/job/register` )
+
+- (2) 해결사의 일 해결신청 (`/api/job/worker/request`)
+
+- (3) 의뢰인이 요청 승낙하기 (`/api/job/yes-or-no`) ➜ 무조건 YES로 설정
+
+- (4) 해결사가 일 시작하기 (`/api/job/worker/start`)
+
+- (6) 해결사가 일 마침 신청하기 (`/api/job/worker/finish`)
+
+- (7) 의뢰인이 성공 혹은 반려 결정하기 (`/api/job/confirm-or-reject`) ➜ 무조건 확정
+
+- (8) 실시간 클라이언트 활성 스레드 수
+
+  ![이미지](https://github.com/dalcheonroadhead/img-cloud/blob/main/2025-03/%EC%8B%9C%EA%B0%84%EB%B3%84%20%ED%99%9C%EC%84%B1%ED%99%94%20%EC%93%B0%EB%A0%88%EB%93%9C%20%EC%88%98.png?raw=true)
+
+### ⚙️ 테스트 환경 설정
+
+**`KEY WORD`** : 계단 식 RPS 증가, 병목 지점 및 오류 발생 지점 확인
+
+**CONFIG SETTING** :
+
+- `MAX RPS` = 5000,
+- `RPS 증가 시점` = 매 5초마다 `RPS 300`씩 증가
+
+- `병목지점`
+  - `에러율`이 0% 초과할 경우
+  - `응답 시간`이 2초를 초과할 경우
+  - `RPS > TPS`인 경우
 
 ## (1) 테스트 001 
+
+### 🚨 문제 상황
+
+- 300 RPS로 시작하자마자 에러 발생 : `Socket Exception - Connection Reset`
+- Hit per Second 지표를 보면 서버에 최초 300개의 요청조차 도달하지 못했음을 확인
+
+![시간별 RPS](https://github.com/user-attachments/assets/692c5135-8b1d-4d34-ae41-d96e99668369)
+
+### 📊 트러블 슈팅
+
+- `Socket Exception`이 클라이언트에서 TCP SOCET 연결 요청을 보냈지만, Tomcat Connection Pool이 가득 차 있어, 대기를 해도 지정한 시간안에 Connection을 받지 못해 발생하는 에러임을 확인
+- 설정 yaml 파일에서 max-count, accept-count를 각각 만 개와 천 개로 늘려서 대기큐와 max-count 개수를 맞춰줘도 해결되지 않음.
+
 ## (2) 테스트 002: WAS, OS 튜닝 후
+
+### 🚨 문제 상황
+
+- yaml 파일 설정 변경을 아무리 해도, 위의 에러를 해결하지 못함. 따라서 테스트를 진행할 수 가 없는 상황
+
+### 📊 트러블 슈팅
+
+**OS 및 WAS 모니터링**
+
+- Spring-actuator 의존성 추가 및 서버에서 처리 중인 요청 수, 전체 스레드 수, 활성 스레드 수 확인
+- OS의 TCP 연결 대기큐 또한 `netstat`, `eBPF` 툴을 활용해 확인
+- 대기큐 크기는 10000, Tomcat 최대 스레드 수는 2000으로 했으나, 각각 128개, 200개 이상 동시 활성화되지 않음. 
+
+**OS의 TCP 연결 분석**
+
+- 리눅스를 활용해, C 코드로 이루어진 OS의 TCP 연결 코드를 분석
+- OS에서 3-way handshaking 과정에서 SYN+ATK를 끝낸 TCB를 저장하는 큐와 마지막 ACK까지 끝낸 TCB를 저장한느 큐가 따로 존재하고 있었음. 
+- 또한 각 두 개의 큐는 내부에서 사이즈를 규정하고 있었기에 yaml의 설정이 먹히지 않았음.
+
+### ✅ 개선 사항
+
+**🌟결과:** 300RPS -> 1800RPS 까지 견디는 서버 완성
+
+- 각 OS 커널의 대기큐 크기를 최대치인 65535로 늘림
+
+```bash
+# 연결 요청 큐 크기 증가
+sudo sysctl -w net.core.somaxconn=65535
+
+# SYN 대기 큐 증가 (3-way handshake 동안 보류된 요청 큐)
+sudo sysctl -w net.ipv4.tcp_max_syn_backlog=65535
+
+# NIC 수신 대기 큐 증가
+sudo sysctl -w net.core.netdev_max_backlog=65535
+```
+
+### a. Hit per sec
+
+![HIT_PER_SECOND_SECNARIO_003](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/HIT_PER_SECOND_SECNARIO_003.png)
+
+### b. RPT
+
+![RPT_Scenario_002](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/RPT_Scenario_002.png)
+
+### c. TPS
+
+![TPS_Secnario_002](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/TPS_Secnario_002.png)
+
+
+
 ## (3) 테스트 003: 알림 전송 서비스에 Retry 로직 추가 후 
+
+### 🚨 문제 상황
+
+- 1800RPS -> 2100RPS로 상승 할 때, RPT가 6초 이상으로 치솟았으며, 다시 목표한 3초 이내로 들어오지 못함.
+- `ExcutorRejectedException` 발생: SPRING 내부 백그라운드 쓰레드가 전부 활용 중이며, 그것을 기다리는 대기 큐도 꽉 차서, Spring이 비동기 임무 수행을 거절할 때, 나는 에러
+
+### ✅ 개선 사항
+
+**🌟결과:**  오히려 에러율이 3분 16초에서 급증하며 종료됨
+
+**재시도 로직 구현**
+
+![image-20250328040021266](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328040021266.png)
+
+**RETRY 전략은 지수 백오프로 구현**
+
+![image](https://github.com/user-attachments/assets/60adf093-9e5e-4b5a-b8fb-fbeb37ccf456)
+
+### a. Hit per sec
+
+![Hit per sec](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/Hit%20per%20sec.png)
+
+### b. RPT
+
+![RPT](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/RPT.png)
+
+### c. TPS
+
+![TPS](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/TPS.png)
+
 ## (4) 테스트 004: 지연 변이 로직 구현 후
+
+### 🚨 문제 상황
+
+- 지수 백오프 전략 재시도 로직을 구성하였는데, 오히려 성능 지표가 떨어짐 (1800RPS -> 1200RPS)
+
+### ✅ 개선 사항
+
+**🌟결과:** 오류율 0.0% 1200RPS -> 3000RPS 
+
+- RPS가 급증한 후 10초 뒤에, 응답시간이 치솟는 현상을 통해, 지수 백오프 재시도 전략이 사실 트래픽을 분산하는 것이 아니라, 뒤로 미루는 것일 뿐이라 판단. 재시도 시점을 분산할 필요성을 느낌
+- 스프링 내장 지수 백오프 전략 재시도 로직에 **`지수 변이`**를 추가하여 재정의
+- 2의 지수시간마다 반복하면서도, 0.1초 이내의 난수를 임의로 각 요청의 재시도마다 더해서 재시도 시점을 여러 개로 분산함. 
+
+### a. Hit per sec
+
+![Hit per second](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/Hit%20per%20second.png)
+
+### b. RPT
+
+![지연변이_RPT](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/%EC%A7%80%EC%97%B0%EB%B3%80%EC%9D%B4_RPT.png)
+
+### c. TPS
+
+![image-20250328162828176](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-03/image-20250328162828176.png)
+
+
+
 ## (5) 테스트 005 ~ 010: 톰캣 Thread 수와 DB connection 의 연관 관계
+
+### 🚨 문제 상황
+
+- 이후 5차 테스트에서는 3000RPS보다 요청 부하를 늘리려고 시도하자,  `Socket Exception - Connection Rest`과 `JDBC Exception - JDBC Time out` 에러가 지속적으로 나타남.
+
+### 📊 트러블 슈팅
+
+**DB 유후 커넥션 수 변동**
+
+**톰캣 쓰레드 수 **
+
 ## (6) 테스트 016: SQL 진입점 로깅, 에러 수집, 슬로우 쿼리 확인
 
+### 🚨 문제 상황
 
+### ✅ 개선 사항
+
+**🌟결과:** 
 
 
 

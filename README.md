@@ -34,7 +34,7 @@
 - 하기 싫은 **`소일 거리`** 대신 해줄 사람을 매칭 해주는 서비스
 - **`당근 알바`, `해주세요`** 같은 앱을 소일거리 매칭으로 특화
 
-
+<br/>
 
 ## (2) USER FLOW
 
@@ -49,7 +49,7 @@
 
 ![image-20250412133004318](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/image-20250412133004318.png)
 
-
+<br/>
 
 ## (3) 서비스 아키텍쳐
 
@@ -58,7 +58,7 @@
 - Redis 활용 Read/Write-Through Pattern 구현
 - 모든 API 요청은 계약 상대방에게 **`FCM 알림`** 전송
 
-
+<br/>
 
 ## (4) ERD
 
@@ -70,7 +70,7 @@
 
 - 각 회원은 일거리에 대해서 자신만의 상태 (**`MatchingStatus`**)를 가진다. 가질 수 있는 상태는 위와 같다.
 
-
+<br/>
 
 # 1️⃣ '근처 일거리 찾기 API' 고도화 과정과 결과
 

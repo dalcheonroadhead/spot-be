@@ -1,5 +1,9 @@
 <h1 align='center'>매칭 서비스 기술 보고서</h1>
 
+
+
+<div align = 'center'>
+
 ## 0️⃣ 서비스 한 눈에 이해하기
 
 ### [(0) 개요]()
@@ -51,3 +55,7 @@
 ### [(2) JDBC connection timeout 개선]()
 
 ### [(3) 오류 Log 확인 절차 개선]()
+
+
+
+</div>

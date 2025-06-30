@@ -53,9 +53,8 @@
 
 ## (3) 서비스 아키텍쳐
 
-![SPOT_JOB_MATCHING_ARCHITECTURE](https://raw.githubusercontent.com/dalcheonroadhead/img-cloud/main/2025-04/SPOT_JOB_MATCHING_ARCHITECTURE.png)
+![SPOT SYSTEM ARCHITECTURE](https://github.com/user-attachments/assets/0f851890-ae21-4f08-92c5-db70e66cf6a2)
 
-- Redis 활용 Read/Write-Through Pattern 구현
 - 모든 API 요청은 계약 상대방에게 **`FCM 알림`** 전송
 
 <br/>

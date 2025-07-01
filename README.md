@@ -378,7 +378,7 @@ Limit: 100 row(s) (cost=10612 rows=100)(actual time=314..314 rows=100 loops=1)
 **CONFIG SETTING** :
 
 - `MAX RPS` = 5000,
-- `RPS 증가 시점` = 매 5초마다 `RPS 300`씩 증가
+- `RPS 증가 시점` = 매 30초마다 `RPS 100`씩 증가
 
 - `병목지점`
   - `에러율`이 0% 초과할 경우
